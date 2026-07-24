@@ -1,39 +1,38 @@
 @echo off
-REM ============================================================
-REM  detener.bat  -  Detiene la app de Book It Escuelas
-REM  Busca y mata los procesos de python que corren app.py
-REM ============================================================
+setlocal
 chcp 65001 >nul 2>&1
 cd /d "%~dp0"
+title Book It Escuelas - Detener
 
-echo [+] Buscando la aplicacion en ejecucion...
+echo ============================================================
+echo  Deteniendo aplicacion...
+echo ============================================================
+echo.
 
-REM Buscar python corriendo escuela\app.py y matarlo
-set "ENCONTRADO=0"
-for /f "tokens=2" %%i in ('tasklist /fi "imagename eq python.exe" /fo list 2^>nul ^| findstr /i "PID"') do (
-    set "ENCONTRADO=1"
+set "MATADOS=0"
+
+REM Buscar ventanas CMD que esten corriendo activar.bat o app.py y matarlas.
+REM Usamos tasklist + taskkill (compatible con Windows 10 y 11).
+
+REM 1) Matar python.exe / pythonw.exe que tengan app.py en su linea de comando.
+REM    wmic ya no existe en Win11, usamos powershell como fallback robusto.
+for /f "tokens=*" %%i in ('powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='python.exe' OR Name='pythonw.exe'\" | Where-Object { $_.CommandLine -like '*app.py*' } | Select-Object -ExpandProperty ProcessId" 2^>nul') do (
+    echo [+] Deteniendo proceso PID %%i (python app.py)...
+    taskkill /pid %%i /f >nul 2>&1
+    if !errorlevel! == 0 set "MATADOS=1"
 )
 
-REM Usar wmic para encontrar el proceso por linea de comando
-for /f "tokens=*" %%i in ('wmic process where "name='python.exe' or name='python3.exe'" get processid^,commandline 2^>nul ^| findstr /i "app.py"') do (
-    for /f "tokens=2" %%p in ("%%i") do (
-        echo [+] Deteniendo proceso PID %%p...
-        taskkill /pid %%p /f >nul 2>&1
-        if errorlevel 1 (
-            echo [!] No se pudo detener el proceso %%p.
-        ) else (
-            echo [+] Proceso %%p detenido.
-        )
-    )
+REM 2) Tambien matar cualquier cmd.exe lanzando python escuela\app.py
+for /f "tokens=*" %%i in ('powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='cmd.exe'\" | Where-Object { $_.CommandLine -like '*escuela*' -or $_.CommandLine -like '*app.py*' } | Select-Object -ExpandProperty ProcessId" 2^>nul') do (
+    echo [+] Deteniendo ventana CMD PID %%i...
+    taskkill /pid %%i /f >nul 2>&1
 )
 
-REM Tambien buscar pythonw.exe (sin consola)
-for /f "tokens=*" %%i in ('wmic process where "name='pythonw.exe'" get processid^,commandline 2^>nul ^| findstr /i "app.py"') do (
-    for /f "tokens=2" %%p in ("%%i") do (
-        echo [+] Deteniendo proceso PID %%p...
-        taskkill /pid %%p /f >nul 2>&1
-    )
+if "%MATADOS%"=="0" (
+    echo [+] No se encontro la aplicacion en ejecucion.
+) else (
+    echo [+] Aplicacion detenida.
 )
-
-echo [+] Listo. Aplicacion detenida.
+echo.
 timeout /t 2 >nul
+endlocal

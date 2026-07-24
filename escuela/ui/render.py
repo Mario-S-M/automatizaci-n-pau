@@ -301,8 +301,8 @@ button.secundario { background: #eef0f4; color: var(--texto); }
 .sin-cambios { color: var(--texto-suave); font-size: 13.5px; padding: 20px 0; text-align: center; }
 """
 
-_RUTAS = {"menu": "/", "insertar": "/insertar", "editar": "/editar"}
-_ETIQUETAS_NAV = {"menu": "Menu", "insertar": "Insertar escuela", "editar": "Editar escuela"}
+_RUTAS = {"menu": "/", "insertar": "/insertar", "editar": "/editar", "historial": "/historial"}
+_ETIQUETAS_NAV = {"menu": "Menu", "insertar": "Insertar escuela", "editar": "Editar escuela", "historial": "Historial"}
 
 
 def _sidebar_html(activo):
@@ -576,7 +576,159 @@ document.addEventListener('DOMContentLoaded', () => {
             selector.dispatchEvent(new Event('change'));
         }
     }
+
+    // ---------- Pantalla de Historial ----------
+    // Si estamos en /historial, cargar la lista de snapshots y recientes,
+    // y permitir "jal back" (restaurar valores de una accion anterior).
+    if (modoActual === 'historial') {
+        cargarHistorial();
+    }
 });
+
+async function cargarHistorial() {
+    const contenedor = document.getElementById('hist-lista');
+    const contRecientes = document.getElementById('hist-recientes');
+    if (!contenedor) return;
+    try {
+        const resp = await fetch('/historial/listar', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({}),
+        });
+        const data = await resp.json();
+        if (!data.ok) {
+            contenedor.innerHTML = '<div class="aviso-vacio">Error: ' + (data.error || '') + '</div>';
+            return;
+        }
+        // Recientes
+        let htmlRec = '';
+        if (data.recientes && data.recientes.length) {
+            htmlRec = '<div style="font-size:13px;font-weight:600;margin-bottom:6px;">Recientes (ultimas 20 escuelas tocadas):</div>';
+            htmlRec += data.recientes.slice().reverse().map(r => {
+                const safe = (r.nombre || '').replace(/'/g, "\\'");
+                return '<button type="button" class="boton secundario" style="margin:3px;font-size:12px;" '
+                    + 'onclick="abrirEditarDesdeHistorial(' + JSON.stringify(r.id) + ', ' + JSON.stringify(safe) + ')">'
+                    + escapeHtml(r.nombre) + ' <span style="color:var(--texto-suave);">(' + r.ts + ')</span></button>';
+            }).join('');
+        }
+        contRecientes.innerHTML = htmlRec;
+        // Snapshots (log de acciones)
+        const snaps = (data.snapshots || []).slice().reverse();
+        if (!snaps.length) {
+            contenedor.innerHTML = '<div class="aviso-vacio">No hay acciones registradas todavia.</div>';
+            return;
+        }
+        contenedor.innerHTML = snaps.map((s, i) => {
+            const vals = JSON.stringify(s.valores || {});
+            return '<div class="diff-fila" style="grid-template-columns:1fr auto;align-items:center;">'
+                + '<div><div class="etiqueta">' + escapeHtml(s.accion) + ' - ' + escapeHtml(s.nombre || s.id) + '</div>'
+                + '<div style="color:var(--texto-suave);font-size:12px;">' + s.ts + ' | id=' + escapeHtml(s.id) + ' | ' + escapeHtml(s.extra || '') + '</div></div>'
+                + '<button type="button" class="boton secundario" style="font-size:12px;" '
+                + 'onclick=\'restaurarSnapshot(' + i + ')\'>Restaurar</button>'
+                + '</div>';
+        }).join('');
+        // Guardar los snapshots en variable global para que Restaurar funcione
+        window._histSnaps = snaps;
+    } catch (e) {
+        contenedor.innerHTML = '<div class="aviso-vacio">Error de red: ' + e + '</div>';
+    }
+}
+
+function escapeHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
+
+// "Jal back": abrir Editar para esa escuela (restaura el acceso rapido).
+function abrirEditarDesdeHistorial(id, nombre) {
+    location.href = '/editar?nuevo=' + encodeURIComponent(id) + '&nombre=' + encodeURIComponent(nombre || ('Escuela ' + id));
+}
+
+// Restaurar valores de un snapshot: abrir Insertar prellenado con esos valores.
+// Como /insertar es estatico (no recibe query), guardamos un borrador temporal
+// y redirigimos; al cargar Insertar, el JS busca borrador y lo aplica.
+async function restaurarSnapshot(idx) {
+    const snaps = window._histSnaps || [];
+    const snap = snaps[idx];
+    if (!snap) return;
+    if (!confirm('Restaurar "' + snap.accion + ' - ' + (snap.nombre || snap.id) + '"?\nAbrira Insertar con esos valores para que los reenvies.')) return;
+    try {
+        await fetch('/historial/borrador/guardar', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ clave: 'insertar', valores: snap.valores }),
+        });
+        location.href = '/insertar?restaurar=1';
+    } catch (e) {
+        alert('Error al restaurar: ' + e);
+    }
+}
+
+// ---------- Autosave de borrador (persiste al recargar F5) ----------
+let _autoSaveTimer = null;
+function _claveBorradorActual() {
+    if (modoActual === 'editar') {
+        const sel = document.getElementById('selector-colegio');
+        const id = sel ? sel.value : '';
+        return id ? ('editar:' + id) : null;
+    }
+    return modoActual === 'insertar' ? 'insertar' : null;
+}
+function _iniciarAutosave() {
+    // Al cargar, si hay ?restaurar=1, cargar el borrador y aplicarlo al form.
+    const params = new URLSearchParams(location.search);
+    if (params.get('restaurar') === '1') {
+        const clave = _claveBorradorActual() || 'insertar';
+        fetch('/historial/borrador/cargar', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ clave }),
+        }).then(r => r.json()).then(data => {
+            if (data.ok && data.borrador && data.borrador.valores) {
+                aplicarValoresAlForm(data.borrador.valores);
+                if (typeof sincronizarReglas === 'function') sincronizarReglas();
+                mostrarBanner('dry', 'Datos restaurados desde el historial. Revisa y vuelve a enviar.');
+            }
+        }).catch(() => {});
+    }
+    // Autosave con debounce: tras cada cambio, 800ms sin actividad -> guardar.
+    // La clave se calcula dinamicamente en cada disparo (en Editar cambia
+    // segun la escuela seleccionada).
+    document.addEventListener('change', _dispararAutosave);
+    document.addEventListener('input', _dispararAutosave);
+}
+function _dispararAutosave() {
+    clearTimeout(_autoSaveTimer);
+    _autoSaveTimer = setTimeout(() => {
+        const clave = _claveBorradorActual();
+        if (!clave) return;
+        const valores = leerCampos();
+        fetch('/historial/borrador/guardar', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ clave, valores }),
+        }).catch(() => {});
+    }, 800);
+}
+function aplicarValoresAlForm(valores) {
+    document.querySelectorAll('[data-campo]').forEach(el => {
+        const nombre = el.dataset.campo;
+        if (!(nombre in valores)) return;
+        const v = valores[nombre];
+        if (el.dataset.tipo === 'checkbox') {
+            el.checked = !!v;
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+        } else if (el.tagName === 'SELECT') {
+            // Si el value no esta entre las options, intentar match por texto.
+            if (Array.from(el.options).some(o => o.value === String(v))) {
+                el.value = String(v);
+            }
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+        } else {
+            el.value = (v === null || v === undefined) ? '' : String(v);
+            el.dispatchEvent(new Event('input', { bubbles: true }));
+        }
+    });
+}
+// Disparar autosave al cargar (no en menu/historial).
+if (modoActual === 'insertar' || modoActual === 'editar') {
+    _iniciarAutosave();
+}
 """
 
 
@@ -742,4 +894,31 @@ def render_editar(colegios, catalogo=None, cfg=None):
         original={},
         catalogo=catalogo,
         cfg=cfg,
+    )
+
+
+def render_historial():
+    """Pantalla de historial: log de acciones (TXT) + lista de snapshots
+    guardados para 'jal back' (restaurar a una alta/edicion anterior) +
+    recientes. Todo se carga via /historial/listar (GET del JS)."""
+    cuerpo = """
+    <div id="banner"></div>
+    <div class="selector-card">
+        <h3 style="margin:0 0 10px;font-size:15px;">Historial de acciones</h3>
+        <p style="margin:0 0 12px;color:var(--texto-suave);font-size:13px;">
+            Cada alta y edicion (real o practica) se guarda en <code>historial/acciones.log</code>.
+            Puedes restaurar los valores de cualquier accion anterior para volver a enviarlos.
+        </p>
+        <div id="hist-recientes" style="margin-bottom:18px;"></div>
+        <div id="hist-lista"><div class="aviso-vacio">Cargando historial...</div></div>
+    </div>
+    """
+    return _layout(
+        "historial",
+        "Historial",
+        "Registro de altas y ediciones (persistente en TXT/JSON).",
+        cuerpo,
+        cola_html="",
+        modo_js="historial",
+        original={},
     )

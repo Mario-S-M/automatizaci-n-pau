@@ -44,8 +44,14 @@ class ServidorEscuela:
         self._paginas = paginas if isinstance(paginas, dict) else {"/": paginas}
         self._on_cargar = on_cargar
         self._on_enviar = on_enviar
+        self._posts_extra = {}  # ruta -> callback (registrados via registrar_post)
         self._trabajos = queue.Queue()
         self._httpd = None
+
+    def registrar_post(self, ruta, callback):
+        """Registra un endpoint POST extra (ademas de /cargar y /enviar).
+        El callback se ejecuta en el hilo principal (como on_cargar/on_enviar)."""
+        self._posts_extra[ruta] = callback
 
     def _handler_factory(self):
         servidor = self
@@ -89,6 +95,8 @@ class ServidorEscuela:
                     self._responder_json(servidor._encolar(servidor._on_cargar, payload, timeout=90))
                 elif ruta == "/enviar" and servidor._on_enviar:
                     self._responder_json(servidor._encolar(servidor._on_enviar, payload, timeout=240))
+                elif ruta in servidor._posts_extra:
+                    self._responder_json(servidor._encolar(servidor._posts_extra[ruta], payload, timeout=30))
                 else:
                     self.send_response(404)
                     self.end_headers()
