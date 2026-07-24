@@ -74,6 +74,7 @@ def aplicar_defaults_insertar(valores):
     datos["tarjeta"] = True
     datos["transferencia"] = True
     datos["packing"] = True
+    datos["celular"] = True  # "Habilitado" - marcado por defecto al Insertar
     datos["desde_atencion"] = HORA_DESDE_DEFAULT
     datos["hasta_atencion"] = HORA_HASTA_DEFAULT
     datos["fedex_obs"] = FEDEX_OBS_DEFAULT
