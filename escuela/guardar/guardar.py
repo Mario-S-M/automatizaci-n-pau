@@ -84,4 +84,17 @@ def guardar_form(page, id_escuela, valores, dry_run=True):
     if alerta.count() > 0:
         mensaje = (alerta.inner_text() or "").strip()
 
+    # Detectar si el guardado fallo: el sistema real muestra un .alert con
+    # clase de error (alert-danger) o el texto contiene "error"/"fallo".
+    # Si la pagina sigue en el mismo form (URL no cambio a landing), tambien
+    # es indicio de fallo.
+    error_save = False
+    if alerta.count() > 0:
+        clase = alerta.get_attribute("class") or ""
+        txt_lower = mensaje.lower()
+        if "alert-danger" in clase or "error" in txt_lower or "fallo" in txt_lower:
+            error_save = True
+    if error_save:
+        return {"ok": False, "dry_run": False, "url": page.url, "error": mensaje or "el sistema rechazo el guardado"}
+
     return {"ok": True, "dry_run": False, "url": page.url, "mensaje": mensaje}

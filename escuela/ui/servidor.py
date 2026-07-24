@@ -86,16 +86,16 @@ class ServidorEscuela:
                     payload = {}
 
                 if ruta == "/cargar" and servidor._on_cargar:
-                    self._responder_json(servidor._encolar(servidor._on_cargar, payload))
+                    self._responder_json(servidor._encolar(servidor._on_cargar, payload, timeout=90))
                 elif ruta == "/enviar" and servidor._on_enviar:
-                    self._responder_json(servidor._encolar(servidor._on_enviar, payload))
+                    self._responder_json(servidor._encolar(servidor._on_enviar, payload, timeout=240))
                 else:
                     self.send_response(404)
                     self.end_headers()
 
         return Handler
 
-    def _encolar(self, fn, payload):
+    def _encolar(self, fn, payload, timeout=60):
         evento = threading.Event()
         caja = {}
 
@@ -108,7 +108,7 @@ class ServidorEscuela:
                 evento.set()
 
         self._trabajos.put(tarea)
-        completado = evento.wait(timeout=60)
+        completado = evento.wait(timeout=timeout)
         if not completado:
             return {"ok": False, "error": "tiempo de espera agotado"}
         if "error" in caja:

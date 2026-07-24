@@ -37,7 +37,7 @@ def main():
     print("=" * 55)
 
     with sync_playwright() as p:
-        browser = p.chromium.launch(headless=False, slow_mo=800)
+        browser = p.chromium.launch(headless=False, slow_mo=300)
         page = browser.new_page()
 
         iniciar_sesion(page)
@@ -93,6 +93,12 @@ def main():
                         res["nuevo_id"] = str(nuevo[0])
                         res["nuevo_texto"] = nuevo[1]
                         print(f"    [+] Alta exitosa -> nueva escuela id={nuevo[0]} ({nuevo[1]})")
+                        # Re-renderizar /editar con la lista actualizada de
+                        # colegios para que el selector incluya la escuela
+                        # nueva. Sin esto, el redirect a /editar?nuevo=<id>
+                        # serviria un HTML pre-renderizado sin la escuela nueva
+                        # en el <select> y el auto-load nunca dispararia.
+                        paginas["/editar"] = render_editar(colegios2, catalogo, cfg)
                         # Paso 2 automatico: abrir el form de EDICION de la
                         # escuela recien creada y setear SOLO los campos
                         # solo-edicion (celular, repa, etc.) con los valores
@@ -115,8 +121,12 @@ def main():
                                 print(f"    [+] Paso 2 OK: opciones adicionales aplicadas.")
                         else:
                             print(f"    [+] Paso 2 omitido (opciones adicionales vacias).")
+                    else:
+                        print(f"    [!] No se detecto una escuela nueva en el landing.")
                 except Exception as exc:
                     print(f"    [!] No se pudo detectar la nueva escuela: {exc}")
+                    import traceback
+                    traceback.print_exc()
             return res
 
         paginas = {

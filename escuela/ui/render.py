@@ -500,8 +500,10 @@ async function confirmarEnvio() {
         } else if (data.nuevo_id) {
             mostrarBanner('ok', 'Escuela creada (id ' + data.nuevo_id + '). Abriendo opciones adicionales... ' + (data.mensaje || ''));
             original = valores;
+            const nombreNueva = data.nuevo_texto || ('Escuela ' + data.nuevo_id);
             setTimeout(() => {
-                location.href = '/editar?nuevo=' + encodeURIComponent(data.nuevo_id);
+                location.href = '/editar?nuevo=' + encodeURIComponent(data.nuevo_id)
+                    + '&nombre=' + encodeURIComponent(nombreNueva);
             }, 900);
         } else {
             mostrarBanner('ok', 'Guardado correctamente. ' + (data.mensaje || ''));
@@ -558,9 +560,18 @@ document.addEventListener('DOMContentLoaded', () => {
         // Tras alta real, confirmarEnvio redirige a /editar?nuevo=<id>.
         // Auto-cargar el form de edicion de esa escuela sin que el usuario
         // tenga que elegirla a mano (ahorra el paso de ir a Editar).
+        // Si la escuela nueva no esta en el selector (p.ej. si el
+        // re-render del servidor no llego a tiempo), se agrega manualmente
+        // y despues se dispara el change para que /cargar la traiga.
         const paramsCargar = new URLSearchParams(location.search);
         const nuevoId = paramsCargar.get('nuevo');
-        if (nuevoId && selector.querySelector('option[value="' + nuevoId + '"]')) {
+        if (nuevoId) {
+            if (!selector.querySelector('option[value="' + nuevoId + '"]')) {
+                const opt = document.createElement('option');
+                opt.value = nuevoId;
+                opt.textContent = paramsCargar.get('nombre') || ('Escuela ' + nuevoId);
+                selector.appendChild(opt);
+            }
             selector.value = nuevoId;
             selector.dispatchEvent(new Event('change'));
         }
