@@ -47,7 +47,7 @@ REM Avisar si requirements.txt cambio en el ultimo pull
 git diff HEAD~1 HEAD --quiet -- requirements.txt 2>nul
 if errorlevel 1 (
     echo [!] requirements.txt cambio en este pull.
-    echo     Ejecuta 'activar.bat' (o 'reiniciar.bat') para reinstalar dependencias.
+    echo     Ejecuta 'activar.bat' o 'reiniciar.bat' para reinstalar dependencias.
     echo.
 )
 

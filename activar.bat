@@ -23,7 +23,7 @@ for %%c in (python py python3) do (
     )
 )
 if not defined PYCMD (
-    echo [!] No se encontro Python. Instala Python 3.9+ desde https://www.python.org/downloads/
+    echo [ERROR] No se encontro Python. Instala Python 3.9+ desde https://www.python.org/downloads/
     echo     Asegurate de marcar "Add Python to PATH" al instalar.
     echo.
     pause
@@ -35,10 +35,10 @@ echo.
 
 REM --- 2) Crear venv si no existe ---
 if not exist "venv\Scripts\activate.bat" (
-    echo [+] Creando entorno virtual (venv)...
+    echo [+] Creando entorno virtual venv...
     !PYCMD! -m venv venv
     if errorlevel 1 (
-        echo [!] No se pudo crear el venv.
+        echo [ERROR] No se pudo crear el venv.
         echo     Prueba manualmente: !PYCMD! -m venv venv
         echo.
         pause
@@ -54,7 +54,7 @@ if not exist "venv\Scripts\activate.bat" (
 REM --- 3) Activar venv ---
 call venv\Scripts\activate.bat
 if errorlevel 1 (
-    echo [!] No se pudo activar el venv.
+    echo [ERROR] No se pudo activar el venv.
     pause
     exit /b 1
 )
@@ -64,7 +64,7 @@ echo [+] Verificando/instalando dependencias...
 python -m pip install --upgrade pip -q
 python -m pip install -r requirements.txt -q
 if errorlevel 1 (
-    echo [!] Error instalando dependencias. Revisa el mensaje arriba.
+    echo [ERROR] Error instalando dependencias. Revisa el mensaje arriba.
     echo.
     pause
     exit /b 1
@@ -76,7 +76,7 @@ REM --- 5) Descargar Chromium si falta ---
 echo [+] Verificando navegador Chromium...
 python -m playwright install chromium
 if errorlevel 1 (
-    echo [!] Error descargando Chromium. Reintenta o corre manualmente:
+    echo [ERROR] Error descargando Chromium. Reintenta o corre manualmente:
     echo     python -m playwright install chromium
     echo.
     pause
@@ -87,7 +87,7 @@ echo.
 
 REM --- 6) Verificar config.py ---
 if not exist "config.py" (
-    echo [!] FALTA config.py con tus credenciales (EMAIL, PASSWORD).
+    echo [ERROR] FALTA config.py con tus credenciales: EMAIL, PASSWORD.
     echo     Copia config.example.py a config.py y completa los valores.
     echo.
     pause

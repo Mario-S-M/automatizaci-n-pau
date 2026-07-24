@@ -1,5 +1,5 @@
 @echo off
-setlocal
+setlocal enabledelayedexpansion
 chcp 65001 >nul 2>&1
 cd /d "%~dp0"
 title Book It Escuelas - Detener
@@ -17,7 +17,7 @@ REM Usamos tasklist + taskkill (compatible con Windows 10 y 11).
 REM 1) Matar python.exe / pythonw.exe que tengan app.py en su linea de comando.
 REM    wmic ya no existe en Win11, usamos powershell como fallback robusto.
 for /f "tokens=*" %%i in ('powershell -NoProfile -Command "Get-CimInstance Win32_Process -Filter \"Name='python.exe' OR Name='pythonw.exe'\" | Where-Object { $_.CommandLine -like '*app.py*' } | Select-Object -ExpandProperty ProcessId" 2^>nul') do (
-    echo [+] Deteniendo proceso PID %%i (python app.py)...
+    echo [+] Deteniendo proceso PID %%i - python app.py...
     taskkill /pid %%i /f >nul 2>&1
     if !errorlevel! == 0 set "MATADOS=1"
 )
