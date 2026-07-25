@@ -604,7 +604,7 @@ async function cargarHistorial() {
         if (data.recientes && data.recientes.length) {
             htmlRec = '<div style="font-size:13px;font-weight:600;margin-bottom:6px;">Recientes (ultimas 20 escuelas tocadas):</div>';
             htmlRec += data.recientes.slice().reverse().map(r => {
-                const safe = (r.nombre || '').replace(/'/g, "\\'");
+                const safe = (r.nombre || '').replace(/'/g, "\\\\'");
                 return '<button type="button" class="boton secundario" style="margin:3px;font-size:12px;" '
                     + 'onclick="abrirEditarDesdeHistorial(' + JSON.stringify(r.id) + ', ' + JSON.stringify(safe) + ')">'
                     + escapeHtml(r.nombre) + ' <span style="color:var(--texto-suave);">(' + r.ts + ')</span></button>';
@@ -623,7 +623,7 @@ async function cargarHistorial() {
                 + '<div><div class="etiqueta">' + escapeHtml(s.accion) + ' - ' + escapeHtml(s.nombre || s.id) + '</div>'
                 + '<div style="color:var(--texto-suave);font-size:12px;">' + s.ts + ' | id=' + escapeHtml(s.id) + ' | ' + escapeHtml(s.extra || '') + '</div></div>'
                 + '<button type="button" class="boton secundario" style="font-size:12px;" '
-                + 'onclick=\'restaurarSnapshot(' + i + ')\'>Restaurar</button>'
+                + 'onclick=\\'restaurarSnapshot(' + i + ')\\'>Restaurar</button>'
                 + '</div>';
         }).join('');
         // Guardar los snapshots en variable global para que Restaurar funcione
@@ -649,7 +649,7 @@ async function restaurarSnapshot(idx) {
     const snaps = window._histSnaps || [];
     const snap = snaps[idx];
     if (!snap) return;
-    if (!confirm('Restaurar "' + snap.accion + ' - ' + (snap.nombre || snap.id) + '"?\nAbrira Insertar con esos valores para que los reenvies.')) return;
+    if (!confirm('Restaurar "' + snap.accion + ' - ' + (snap.nombre || snap.id) + '"?\\nAbrira Insertar con esos valores para que los reenvies.')) return;
     try {
         await fetch('/historial/borrador/guardar', {
             method: 'POST', headers: {'Content-Type': 'application/json'},
