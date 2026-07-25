@@ -27,6 +27,12 @@ def _set_campo(page, campo, valor):
         # sistema no permite reasignarla tras el alta). Se omite en vez de
         # colgarse esperando a que se habilite.
         return
+    if not loc.is_visible():
+        # Campo oculto por cascada del sistema real (ej. "entrega_sucursal_obs"
+        # cuando "Entrega Sucursal" esta desactivado: el textarea queda con
+        # display:none, no disabled). Se omite en vez de colgarse 30s
+        # esperando a que .fill()/.select_option() lo encuentren visible.
+        return
 
     if campo["widget"] == "checkbox":
         # Bootstrap "custom-checkbox": el <input> real queda cubierto por su
