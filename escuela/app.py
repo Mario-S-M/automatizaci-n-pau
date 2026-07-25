@@ -269,9 +269,23 @@ def main():
             data = cargar_borrador(clave)
             return {"ok": True, "borrador": data}
 
+        def on_historial_guardar_ahora(payload):
+            """Guarda el estado actual del formulario como snapshot en historial
+            (para que aparezca en la pagina de Historial aunque no se haya
+            completado el envio)."""
+            valores = payload.get("valores", {})
+            id_escuela = payload.get("idEscuela", "0")
+            nombre = payload.get("nombre", "")
+            try:
+                registrar_accion("guardado-manual", id_escuela, nombre, valores, extra="guardado manual desde formulario")
+                return {"ok": True}
+            except Exception as exc:
+                return {"ok": False, "error": str(exc)}
+
         servidor.registrar_post("/historial/listar", on_historial_listar)
         servidor.registrar_post("/historial/borrador/guardar", on_historial_borrador_guardar)
         servidor.registrar_post("/historial/borrador/cargar", on_historial_borrador_cargar)
+        servidor.registrar_post("/historial/guardar-ahora", on_historial_guardar_ahora)
         puerto = servidor.iniciar()
         url = f"http://127.0.0.1:{puerto}/"
         print(f"[+] Listo -> {url}")

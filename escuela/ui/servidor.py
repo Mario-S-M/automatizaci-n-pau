@@ -45,13 +45,32 @@ class ServidorEscuela:
         self._on_cargar = on_cargar
         self._on_enviar = on_enviar
         self._posts_extra = {}  # ruta -> callback (registrados via registrar_post)
+        self._posts_directos = {}  # ruta -> callback (via registrar_post_directo)
         self._trabajos = queue.Queue()
         self._httpd = None
 
     def registrar_post(self, ruta, callback):
         """Registra un endpoint POST extra (ademas de /cargar y /enviar).
-        El callback se ejecuta en el hilo principal (como on_cargar/on_enviar)."""
+        El callback se ejecuta en el hilo principal (como on_cargar/on_enviar),
+        encolado igual que ellos: si hay un trabajo largo de Playwright en
+        curso, este callback espera su turno detras."""
         self._posts_extra[ruta] = callback
+
+    def registrar_post_directo(self, ruta, callback):
+        """Registra un endpoint POST que NO toca `page` (no depende de
+        Playwright): se ejecuta directo en el hilo del request HTTP, sin
+        pasar por la cola compartida. Usar solo para callbacks que no usan
+        Playwright (ej. consultar el estado de un guardado en curso), para
+        que no se queden esperando detras de un guardar_form() lento."""
+        self._posts_directos[ruta] = callback
+
+    def encolar_en_fondo(self, fn):
+        """Mete `fn` (callable sin argumentos) a la cola de Playwright para
+        que se ejecute mas tarde en el hilo principal, sin esperar el
+        resultado (fire-and-forget). A diferencia de `_encolar`, el que llama
+        no se bloquea: sirve para guardar en Bookitech en segundo plano
+        mientras la respuesta HTTP ya se envio con el guardado local."""
+        self._trabajos.put(fn)
 
     def _handler_factory(self):
         servidor = self

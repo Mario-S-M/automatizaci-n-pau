@@ -672,10 +672,11 @@ function _claveBorradorActual() {
     return modoActual === 'insertar' ? 'insertar' : null;
 }
 function _iniciarAutosave() {
-    // Al cargar, si hay ?restaurar=1, cargar el borrador y aplicarlo al form.
     const params = new URLSearchParams(location.search);
-    if (params.get('restaurar') === '1') {
-        const clave = _claveBorradorActual() || 'insertar';
+    const clave = _claveBorradorActual();
+    const restored = params.get('restaurar') === '1';
+    if (restored && clave) {
+        // Restore from ?restaurar=1 (explicit historial restore)
         fetch('/historial/borrador/cargar', {
             method: 'POST', headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ clave }),
@@ -686,12 +687,29 @@ function _iniciarAutosave() {
                 mostrarBanner('dry', 'Datos restaurados desde el historial. Revisa y vuelve a enviar.');
             }
         }).catch(() => {});
+    } else if (clave) {
+        // Silent auto-restore from last borrador (survives F5 / server restart)
+        fetch('/historial/borrador/cargar', {
+            method: 'POST', headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({ clave }),
+        }).then(r => r.json()).then(data => {
+            if (data.ok && data.borrador && data.borrador.valores) {
+                const current = leerCampos();
+                const hasValues = Object.values(current).some(v => v !== '' && v !== false && v !== null && v !== undefined);
+                if (!hasValues) {
+                    aplicarValoresAlForm(data.borrador.valores);
+                    if (typeof sincronizarReglas === 'function') sincronizarReglas();
+                    mostrarBanner('dry', 'Borrador automatico restaurado. Puedes seguir editando.');
+                }
+            }
+        }).catch(() => {});
     }
     // Autosave con debounce: tras cada cambio, 800ms sin actividad -> guardar.
-    // La clave se calcula dinamicamente en cada disparo (en Editar cambia
-    // segun la escuela seleccionada).
     document.addEventListener('change', _dispararAutosave);
     document.addEventListener('input', _dispararAutosave);
+    // Beforeunload: save inmediato para no perder el ultimo estado
+    window.addEventListener('beforeunload', _autoSaveBeforeUnload);
+    window.addEventListener('pagehide', _autoSaveBeforeUnload);
 }
 function _dispararAutosave() {
     clearTimeout(_autoSaveTimer);
@@ -703,6 +721,8 @@ function _dispararAutosave() {
             method: 'POST', headers: {'Content-Type': 'application/json'},
             body: JSON.stringify({ clave, valores }),
         }).catch(() => {});
+        // localStorage fallback: respaldo local en el navegador
+        _guardarLocalStorage(clave, valores);
     }, 800);
 }
 function aplicarValoresAlForm(valores) {
@@ -714,7 +734,6 @@ function aplicarValoresAlForm(valores) {
             el.checked = !!v;
             el.dispatchEvent(new Event('change', { bubbles: true }));
         } else if (el.tagName === 'SELECT') {
-            // Si el value no esta entre las options, intentar match por texto.
             if (Array.from(el.options).some(o => o.value === String(v))) {
                 el.value = String(v);
             }
@@ -725,9 +744,120 @@ function aplicarValoresAlForm(valores) {
         }
     });
 }
+// ---------- Guardar en historial ahora (snapshot explicito) ----------
+function guardarEnHistorialAhora() {
+    const valores = leerCampos();
+    const idEscuela = modoActual === 'editar'
+        ? (document.getElementById('selector-colegio')?.value || '0')
+        : '0';
+    let nombre = '';
+    if (modoActual === 'editar') {
+        const sel = document.getElementById('selector-colegio');
+        if (sel && sel.selectedOptions.length) nombre = sel.selectedOptions[0].textContent;
+    } else {
+        nombre = valores.nombre || '';
+    }
+    fetch('/historial/guardar-ahora', {
+        method: 'POST', headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({ idEscuela, valores, nombre }),
+    }).then(r => r.json()).then(data => {
+        if (data.ok) {
+            mostrarBanner('dry', 'Estado actual guardado en historial.');
+        } else {
+            mostrarBanner('err', 'Error: ' + (data.error || ''));
+        }
+    }).catch(e => {
+        mostrarBanner('err', 'Error de red: ' + e);
+    });
+}
+// ---------- Descargar respaldo JSON ----------
+function descargarRespaldo() {
+    const valores = leerCampos();
+    const idEscuela = modoActual === 'editar'
+        ? (document.getElementById('selector-colegio')?.value || '0')
+        : '0';
+    const respaldo = {
+        version: 1,
+        fecha: new Date().toISOString(),
+        modo: modoActual,
+        idEscuela,
+        valores,
+    };
+    const blob = new Blob([JSON.stringify(respaldo, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    const ts = new Date().toISOString().slice(0, 19).replace(/[:-]/g, '');
+    a.download = 'respaldo-escuela-' + ts + '.json';
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    URL.revokeObjectURL(url);
+    mostrarBanner('dry', 'Respaldo descargado como JSON.');
+}
+// ---------- Cargar respaldo JSON desde archivo ----------
+function cargarRespaldo(inputEl) {
+    const file = inputEl.files[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = function(e) {
+        try {
+            const data = JSON.parse(e.target.result);
+            if (!data.valores) {
+                mostrarBanner('err', 'El archivo no tiene valores validos.');
+                return;
+            }
+            aplicarValoresAlForm(data.valores);
+            if (typeof sincronizarReglas === 'function') sincronizarReglas();
+            mostrarBanner('dry', 'Respaldo cargado. Revisa los valores.');
+        } catch (err) {
+            mostrarBanner('err', 'Error al leer archivo: ' + err);
+        }
+    };
+    reader.readAsText(file);
+    inputEl.value = '';
+}
+// ---------- localStorage fallback ----------
+const LS_PREFIX = 'escuela_';
+function _guardarLocalStorage(clave, valores) {
+    try {
+        localStorage.setItem(LS_PREFIX + clave, JSON.stringify(valores));
+    } catch (e) {}
+}
+function _cargarLocalStorageFallback() {
+    const clave = _claveBorradorActual();
+    if (!clave) return;
+    try {
+        const saved = localStorage.getItem(LS_PREFIX + clave);
+        if (!saved) return;
+        const valores = JSON.parse(saved);
+        const current = leerCampos();
+        const hasValues = Object.values(current).some(v => v !== '' && v !== false && v !== null && v !== undefined);
+        if (!hasValues && Object.keys(valores).length > 0) {
+            aplicarValoresAlForm(valores);
+            if (typeof sincronizarReglas === 'function') sincronizarReglas();
+            mostrarBanner('dry', 'Respaldo local restaurado (localStorage).');
+        }
+    } catch (e) {}
+}
+// ---------- Beforeunload: ultimo guardado antes de cerrar ----------
+function _autoSaveBeforeUnload() {
+    const clave = _claveBorradorActual();
+    if (!clave) return;
+    const valores = leerCampos();
+    try {
+        localStorage.setItem(LS_PREFIX + clave, JSON.stringify(valores));
+    } catch (e) {}
+    try {
+        const body = JSON.stringify({ clave, valores });
+        navigator.sendBeacon('/historial/borrador/guardar', new Blob([body], { type: 'application/json' }));
+    } catch (e) {}
+}
 // Disparar autosave al cargar (no en menu/historial).
 if (modoActual === 'insertar' || modoActual === 'editar') {
     _iniciarAutosave();
+    // localStorage fallback (restore if server borrador didn't)
+    setTimeout(_cargarLocalStorageFallback, 1000);
 }
 """
 
@@ -846,6 +976,11 @@ def render_insertar(datos_iniciales, catalogo=None, cfg=None):
         <div id="campos">{campos_html}</div>
         <div id="barra-acciones" class="barra-acciones" style="display:flex;">
             <button type="button" id="btn-revisar" class="boton secundario">Revisar cambios</button>
+            <button type="button" class="boton secundario" onclick="guardarEnHistorialAhora()">Guardar en historial</button>
+            <button type="button" class="boton secundario" onclick="descargarRespaldo()">Descargar respaldo</button>
+            <label class="boton secundario" style="cursor:pointer;">Cargar respaldo
+            <input type="file" accept=".json" style="display:none" onchange="cargarRespaldo(this)">
+            </label>
         </div>
     </form>
     """
@@ -881,6 +1016,11 @@ def render_editar(colegios, catalogo=None, cfg=None):
         <div id="campos"><div class="aviso-vacio">Elige un colegio para cargar sus datos.</div></div>
         <div id="barra-acciones" class="barra-acciones" style="display:none;">
             <button type="button" id="btn-revisar" class="boton secundario">Revisar cambios</button>
+            <button type="button" class="boton secundario" onclick="guardarEnHistorialAhora()">Guardar en historial</button>
+            <button type="button" class="boton secundario" onclick="descargarRespaldo()">Descargar respaldo</button>
+            <label class="boton secundario" style="cursor:pointer;">Cargar respaldo
+            <input type="file" accept=".json" style="display:none" onchange="cargarRespaldo(this)">
+            </label>
         </div>
     </form>
     """
