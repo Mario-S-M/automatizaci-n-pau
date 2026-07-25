@@ -21,6 +21,22 @@ FEDEX_OBS_DEFAULT = (
     "Recibe por fedex en 3 a 5 días. Al finalizar tu compra puedes seguir tu "
     "envío en camino en la sección de PEDIDOS."
 )
+# A diferencia de FEDEX_OBS_DEFAULT (se prellena siempre desde el alta), este
+# solo se autocompleta cuando el usuario activa el checkbox "Entrega Escuela"
+# durante la sesion (ver _autoLlenarObsEntrega en REGLAS_JS), para no
+# prellenar un mensaje que no aplica si la entrega en escuela no esta activa.
+ENTREGA_ESCUELA_OBS_DEFAULT = (
+    "Para recoger es obligatorio mostrar Qr. de entrega que encontrarás al "
+    "finalizar tu compra en la sección de PEDIDOS."
+)
+# Preparado igual que ENTREGA_ESCUELA_OBS_DEFAULT (autocompleta solo al
+# activar "Entrega Sucursal"), pero aun sin mensaje generico definido: vacio
+# a proposito hasta que se defina el texto real.
+ENTREGA_SUCURSAL_OBS_DEFAULT = ""
+OBSERVACION_DEFAULT = (
+    "Selecciona el grado del alumno y encuentra solamente los libros que "
+    "requieres, sin errores ni complicaciones."
+)
 HORA_DESDE_DEFAULT = "09:00"
 HORA_HASTA_DEFAULT = "17:00"
 
@@ -59,6 +75,8 @@ def config_js():
         "estados": ESTADOS_REGLAS,
         "fedexCostoDefault": FEDEX_COSTO_DEFAULT,
         "fedexCostoProrrateo": FEDEX_COSTO_PRORRATEO,
+        "entregaEscuelaObsDefault": ENTREGA_ESCUELA_OBS_DEFAULT,
+        "entregaSucursalObsDefault": ENTREGA_SUCURSAL_OBS_DEFAULT,
     }
 
 
@@ -78,6 +96,7 @@ def aplicar_defaults_insertar(valores):
     datos["desde_atencion"] = HORA_DESDE_DEFAULT
     datos["hasta_atencion"] = HORA_HASTA_DEFAULT
     datos["fedex_obs"] = FEDEX_OBS_DEFAULT
+    datos["observacion"] = OBSERVACION_DEFAULT
     # Solo forzar costo 165 si envioFedex esta en Sí; si no, el JS lo deja en 0.
     fedex_val = str(datos.get("envioFedex", "")).strip().lower()
     fedex_activo_py = fedex_val in ("si", "sí", "1", "true", "yes")
@@ -369,6 +388,20 @@ function aplicarReglasObs() {
     actualizarFedexObsRequerido();
 }
 
+// Autocompleta la obs de entrega con un mensaje default SOLO en el momento en
+// que el usuario activa el checkbox (no al cargar la pagina, no si ya trae
+// texto propio). Si `textoDefault` esta vacio (ver ENTREGA_SUCURSAL_OBS_DEFAULT
+// en reglas.py, aun sin mensaje generico definido) no hace nada.
+function _autoLlenarObsEntrega(nombreCheckbox, nombreObs, textoDefault) {
+    if (!textoDefault) return;
+    const chk = campoEl(nombreCheckbox);
+    const obs = campoEl(nombreObs);
+    if (!chk || !obs || !chk.checked || obs.value.trim()) return;
+    obs.value = textoDefault;
+    obs.dispatchEvent(new Event("input", { bubbles: true }));
+    registrarAuto(nombreObs, textoDefault);
+}
+
 function algunaEntregaActiva() {
     return fedexActivo() || !!valorCampo("entrega_escuela") || !!valorCampo("entrega_sucursal");
 }
@@ -478,7 +511,13 @@ function manejarCambioReglas(e) {
     else if (campo === "envioFedex") aplicarReglasFedex();
     else if (campo === "prorrateo") aplicarReglasProrrateo();
     else if (campo === "packing" || campo === "packpar") aplicarReglasPacking();
-    else if (campo === "entrega_escuela" || campo === "entrega_sucursal") aplicarReglasObs();
+    else if (campo === "entrega_escuela") {
+        _autoLlenarObsEntrega("entrega_escuela", "entrega_escuela_obs", REGLAS_CFG.entregaEscuelaObsDefault);
+        aplicarReglasObs();
+    } else if (campo === "entrega_sucursal") {
+        _autoLlenarObsEntrega("entrega_sucursal", "entrega_sucursal_obs", REGLAS_CFG.entregaSucursalObsDefault);
+        aplicarReglasObs();
+    }
 }
 
 document.addEventListener("change", function(e) {
