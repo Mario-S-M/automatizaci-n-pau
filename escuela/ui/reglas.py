@@ -18,7 +18,7 @@ No toca Playwright ni HTML directamente: solo strings de JS y datos.
 FEDEX_COSTO_DEFAULT = 165
 FEDEX_COSTO_PRORRATEO = 1
 FEDEX_OBS_DEFAULT = (
-    "Recibe por fedex en 3 a 5 días, al finalizar tu compra puedes seguir tu "
+    "Recibe por fedex en 3 a 5 días. Al finalizar tu compra puedes seguir tu "
     "envío en camino en la sección de PEDIDOS."
 )
 HORA_DESDE_DEFAULT = "09:00"
