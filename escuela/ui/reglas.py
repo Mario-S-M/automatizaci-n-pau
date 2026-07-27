@@ -416,7 +416,7 @@ function buscarDuplicado() {
         if (!el) continue;
         const valor = norm(el.value);
         if (!valor) continue;
-        const choque = (CATALOGO || []).find(r => String(r.id) !== idActual && norm(r[campo]) === valor);
+        const choque = (CATALOGO || []).find(r => String(r.id) !== idActual && !r.desactivado && norm(r[campo]) === valor);
         if (choque) {
             return { campo, label: (CAMPO_LABELS && CAMPO_LABELS[campo]) || campo, escuela: choque.nombre };
         }

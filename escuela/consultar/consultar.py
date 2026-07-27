@@ -92,6 +92,7 @@ def escanear_catalogo(page, colegios):
                 "bbva": valores.get("bbva", ""),
                 "codigoweb": valores.get("codigoweb", ""),
                 "usuario": valores.get("usuario", ""),
+                "desactivado": "deshabilitado" in texto.lower(),
             }
         )
     return catalogo
@@ -106,7 +107,7 @@ def escanear_catalogo(page, colegios):
 _CAMPOS_DUPLICADO = ("nombre", "bbva", "codigoweb", "usuario")
 
 
-def _parsear_campos_escuela(html, id_escuela):
+def _parsear_campos_escuela(html, id_escuela, texto=""):
     """Parser ligero con BeautifulSoup: extrae solo los 4 campos de duplicado
     (nombre, bbva, codigoweb, usuario) del HTML que devuelve el POST
     modificarEscuela. No abre el navegador ni ejecuta JS: el servidor ya envio
@@ -129,6 +130,7 @@ def _parsear_campos_escuela(html, id_escuela):
         "bbva": valores.get("bbva", ""),
         "codigoweb": valores.get("codigoweb", ""),
         "usuario": valores.get("usuario", ""),
+        "desactivado": "deshabilitado" in texto.lower(),
     }
 
 
@@ -149,7 +151,7 @@ def escanear_catalogo_rapido(page, colegios, max_workers=15):
     ua = page.evaluate("() => navigator.userAgent")
     headers = {"User-Agent": ua, "Referer": BOOKIT_ESCUELAS_URL}
 
-    def _uno(id_escuela):
+    def _uno(id_escuela, texto=""):
         payload = {"boton": "modificarEscuela", "idEscuela": str(id_escuela)}
         for intento in range(2):
             try:
@@ -161,18 +163,18 @@ def escanear_catalogo_rapido(page, colegios, max_workers=15):
                     timeout=20,
                 )
                 if r.status_code == 200:
-                    return _parsear_campos_escuela(r.text, id_escuela)
+                    return _parsear_campos_escuela(r.text, id_escuela, texto)
             except requests.RequestException:
                 if intento == 1:
                     raise
-        return _parsear_campos_escuela("", id_escuela)
+        return _parsear_campos_escuela("", id_escuela, texto)
 
     total = len(colegios)
     catalogo = [None] * total
     completados = 0
 
     with ThreadPoolExecutor(max_workers=max_workers) as pool:
-        futures = {pool.submit(_uno, id_): i for i, (id_, _texto) in enumerate(colegios)}
+        futures = {pool.submit(_uno, id_, _texto): i for i, (id_, _texto) in enumerate(colegios)}
         for fut in as_completed(futures):
             i = futures[fut]
             completados += 1
@@ -187,6 +189,7 @@ def escanear_catalogo_rapido(page, colegios, max_workers=15):
                     "bbva": "",
                     "codigoweb": "",
                     "usuario": "",
+                    "desactivado": False,
                 }
             print(f"    [{completados}/{total}] {texto}")
 
