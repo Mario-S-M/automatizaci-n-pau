@@ -50,7 +50,7 @@ ESTADOS_REGLAS = [
         "sucursal": ["queretaro"],
         "bbva_prefijo": "BQ",
         "cuenta": ["hidalgo"],
-        "atencion": ["carla"],
+        "atencion": ["karla", "paola"],
     },
     {
         "match": ["michoacan"],
